@@ -1,0 +1,14 @@
+line-length = 100
+
+[lint]
+extend-select = [
+  "UP",  # pyupgrade
+  "D",   # pydocstyle
+  "N",   # pep8-naming
+  "ANN", # flake8-annotations
+  "PYI", # flake8-pyi
+]
+ignore = ["D100"]
+
+[lint.pydocstyle]
+convention = "google"
