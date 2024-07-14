@@ -8,8 +8,16 @@ class GameState(ABC):
     """Abstract class to represent a game state."""
 
     @abstractmethod
-    def is_terminal(self: Self) -> bool:
-        """Return True if the current game state is a terminal one."""
+    def get_winner(self: Self) -> Optional[float]:
+        """Return the winner of the game, if it exists.
+
+        Return the game state resulting from a given action on the current game state along with the
+        potential winner. That is, if the resulting game state isn't terminal, then None is returned
+        to represent the winner. Otherwise, it returns:
+        - 0 if the first player won;
+        - 1 if the second player won;
+        - 0.5 in case of a draw.
+        """
         pass
 
     @abstractmethod
@@ -18,14 +26,6 @@ class GameState(ABC):
         pass
 
     @abstractmethod
-    def transition(self: Self, action: Action) -> tuple[Self, Optional[float]]:
-        """Return the new game state along with the potential winner of the game from an action.
-
-        Return the game state resulting from a given action on the current game state along with the
-        potential winner. That is, if the resulting game state isn't terminal, then None is returned
-        to represent the winner. Otherwise, it returns:
-        - 1 if the player who just played won;
-        - 0 if the player who just played lost;
-        - 0.5 otherwise.
-        """
+    def transition(self: Self, action: Action) -> Self:
+        """Return the new game state resulting from a given action applied on the current state."""
         pass
