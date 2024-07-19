@@ -19,17 +19,17 @@ class _Node:
         """Update the value of the exploration/exploitation trade-off constant."""
         cls.C = value
 
-    def __init__(
-        self: Self,
-        parent: Optional[Self],
-        action: Optional[Action],
-        state: GameState
-    ) -> None:
-        """Initialize the node."""
+    def __init__(self: Self, parent: Optional[Self], state: GameState) -> None:
+        """Initialize the node.
+
+        :param parent: Parent node in the MCTS tree.
+        :param state: The game state this node represents.
+        """
         self.parent: Optional[Self] = parent
-        self.action: Optional[Action] = action
         self.state: GameState = state
+
         self.children: list[_Node] = []
+        self.actions: list[Action] = []
         self.visits: int = 0
         self.n_wins: int = 0
         self.n_draws: int = 0
@@ -50,7 +50,7 @@ class _Node:
 
         # No need to check for the parent's visit count to be positive, since it is necessarily
         # larger than that of its child
-        return self.value + self.C * sqrt(log(self.parent.visits + 1) / self.visits)
+        return self.value + self.C * sqrt(log(self.parent.visits) / self.visits)
 
     @property
     def is_leaf(self: Self) -> bool:
@@ -62,22 +62,17 @@ class _Node:
         if self.is_leaf:
             return self, player
 
-        scores = [(index, child.ucb) for index, child in enumerate(self.children)]
-        scores.sort(key=lambda x: x[1], reverse=True)
-
-        return self.children[choice([index for index, ucb in scores if ucb == scores[0][1]])].select_child(1 - player)
+        return max(self.children, key=lambda child: child.ucb).select_child(1 - player)
 
     def expand(self: Self, player: int) -> tuple[Self, int]:
-        """Expand this Node by listing all the possible actions and choose a child."""
+        """Expand this Node by listing all the possible actions and randomly choose a child."""
         # If the state is terminal, we don't expand the associated node
         if self.state.get_winner() is not None:
             return self, player
 
-        assert self.is_leaf, "Patate"
-
-        actions = self.state.get_possible_actions()
+        self.actions = self.state.get_possible_actions()
         self.children = [
-            _Node(self, action, self.state.transition(action)) for action in actions
+            _Node(self, self.state.transition(action)) for action in self.actions
         ]
 
         return choice(self.children), 1 - player
@@ -91,23 +86,29 @@ class _Node:
         - 1 if it resulted in a loss for the first player;
         - 0.5 if it resulted in a draw.
         """
-        winner = self.state.get_winner()
         new_state = self.state
 
-        while winner is None:
+        while (winner := new_state.get_winner()) is None:
             random_action = choice(new_state.get_possible_actions())
             new_state = new_state.transition(random_action)
-            winner = new_state.get_winner()
 
         return winner
 
     def backpropagate(self: Self, rollout_value: float, player_to_play: int) -> None:
-        """Backpropagate the rollout result through the tree."""
+        """Backpropagate the rollout result through the tree.
+
+        This function performs the backpropagation phase of the MCTS algorithm. It updates the value
+        of the nodes according to the player playing in their position and the rollout result.
+
+        :param rollout_value: The value of the rollout result. It is equal to 0 if the first player
+          won, 1 if the second player won, and 0.5 in case of a draw.
+        :param player_to_play: The player having to play the position represented by this node.
+        """
         self.visits += 1
 
         if rollout_value == 0.5:
             self.n_draws += 1
-        # If the first player win the rollout, while the second player has to play this position,
+        # If the first player wins the rollout, while the second player has to play this position,
         # then it means that the node's value has to increase
         elif rollout_value != player_to_play:
             self.n_wins += 1
@@ -117,10 +118,14 @@ class _Node:
             self.parent.backpropagate(rollout_value, 1 - player_to_play)
 
     def __repr__(self: Self) -> str:
-        return f"_Node({self.value=}, {self.state.__repr__()})"
+        value = self.value
+        visits = self.visits
+
+        return f"_Node({value=}, {visits=}, {self.state.__repr__()})"
 
 
 class MCTS:
+    """A class used to perform an MCTS algorithm."""
     def __init__(
         self: Self,
         state: GameState,
@@ -128,8 +133,17 @@ class MCTS:
         n_simulations: int,
         player: Optional[int] = None
     ) -> None:
+        """Initialize the MCTS algorithm.
+
+        This function sets the global parameters used by the MCTS algorithm and initialize it.
+
+        :param state: The state the game starts in.
+        :param trade_off_constant: Teh trade-off constant as used in the UCB formula.
+        :param n_simulations: The number of simulations that are performed from the root.
+        :param player: The player that plays the position represented by the root.
+        """
         _Node.set_trade_off_constant(trade_off_constant)
-        self.root = _Node(None, None, state)
+        self.root = _Node(None, state)
         self.n_simulations = n_simulations
 
         if player is None:
@@ -140,7 +154,16 @@ class MCTS:
 
         self.player = player
 
-    def get_decision(self: Self) -> Action:
+    def decide(self: Self, advance: bool = True) -> Optional[Action]:
+        """Decide the next move to be played.
+
+        This function performs a number of simulation as specified in the algorithm initialization,
+        updating the nodes' scores along the way. Once these simulations have been performed, it
+        selects the best child to go with according to its visit counts.
+
+        :param advance: If set to True, nothing will be returned and the new root will be set to the
+          aforementioned child. Otherwise, it returns the action leading to the best child.
+        """
         node = self.root
 
         for i in trange(self.n_simulations):
@@ -150,11 +173,14 @@ class MCTS:
             node.backpropagate(rollout_value, player)
             node = self.root
 
-        values = [(index, child.value) for index, child in enumerate(self.root.children)]
+        values = [(index, child.visits) for index, child in enumerate(self.root.children)]
         values.sort(key=lambda x: x[1], reverse=True)
+        max_visits = values[0][1]
+        max_indexes = [index for index, visits in values if visits == max_visits]
+        chosen_index = choice(max_indexes)
 
-        # We pick the first one instead of picking randomly in case of an equality
-        return self.root.children[values[0][0]].action
+        if not advance:
+            return self.root.actions[chosen_index]
 
-    def set_new_root(self: Self, new_root: _Node) -> None:
-        self.root = new_root
+        self.root = self.root.children[chosen_index]
+        self.player = 1 - self.player
