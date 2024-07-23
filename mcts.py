@@ -166,21 +166,17 @@ class MCTS:
         """
         node = self.root
 
-        for i in trange(self.n_simulations):
+        for _ in trange(self.n_simulations):
             node, player = node.select_child(self.player)
             node, player = node.expand(player)
             rollout_value = node.rollout()
             node.backpropagate(rollout_value, player)
             node = self.root
 
-        values = [(index, child.visits) for index, child in enumerate(self.root.children)]
-        values.sort(key=lambda x: x[1], reverse=True)
-        max_visits = values[0][1]
-        max_indexes = [index for index, visits in values if visits == max_visits]
-        chosen_index = choice(max_indexes)
+        chosen_index = max(enumerate(self.root.children), key=lambda x: x[1].visits)[0]
 
-        if not advance:
-            return self.root.actions[chosen_index]
+        if advance:
+            self.root = self.root.children[chosen_index]
+            self.player = 1 - self.player
 
-        self.root = self.root.children[chosen_index]
-        self.player = 1 - self.player
+        return self.root.actions[chosen_index]
