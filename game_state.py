@@ -5,18 +5,21 @@ from action import Action
 
 
 class GameState(ABC):
-    """Abstract class to represent a game state."""
+    """Abstract class to represent a game state.
+
+    It is assumed that the player playing the position can be identified using some internal data.
+    For instance, the player whose turn it is could have their pieces represented by positive
+    numbers, while the other one would have their pieces represented by negative numbers.
+    """
 
     @abstractmethod
     def get_winner(self: Self) -> Optional[float]:
         """Return the winner of the game, if it exists.
 
-        Return the game state resulting from a given action on the current game state along with the
-        potential winner. That is, if the resulting game state isn't terminal, then None is returned
-        to represent the winner. Otherwise, it returns:
-        - 0 if the first player won;
-        - 1 if the second player won;
-        - 0.5 in case of a draw.
+        If the current game state isn't terminal, then None is returned. Otherwise, it returns:
+        - 1 if player playing this position won.;
+        - -1 if the other player won;
+        - 0 in case of a draw.
         """
         pass
 
