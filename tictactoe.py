@@ -10,6 +10,7 @@ from game_state import GameState
 
 class TicTacToeAction(Action):
     """A Tic-Tac-Toe action."""
+
     def __init__(self: Self, x: int, y: int) -> None:
         """Initialize the action."""
         self.x = x
@@ -22,7 +23,10 @@ class TicTacToeAction(Action):
 
 class TicTacToeGameState(GameState):
     """A Tic-Tac-Toe game state."""
-    def __init__(self: Self, initial_state: Optional[npt.NDArray[np.int8]] = None) -> None:
+
+    def __init__(
+        self: Self, initial_state: Optional[npt.NDArray[np.int8]] = None
+    ) -> None:
         """Initialize the game state."""
         if initial_state is None:
             self.board: npt.NDArray[np.int8] = np.zeros((3, 3), dtype=np.int8)
@@ -44,17 +48,25 @@ class TicTacToeGameState(GameState):
             if col[0] == col[1] == col[2] and col[0]:
                 return int(col[0])
 
-        if self.board[0, 0] == self.board[1, 1] == self.board[2, 2] and self.board[0, 0]:
+        if (
+            self.board[0, 0] == self.board[1, 1] == self.board[2, 2]
+            and self.board[0, 0]
+        ):
             return int(self.board[0, 0])
 
-        if self.board[0, 2] == self.board[1, 1] == self.board[2, 0] and self.board[0, 2]:
+        if (
+            self.board[0, 2] == self.board[1, 1] == self.board[2, 0]
+            and self.board[0, 2]
+        ):
             return int(self.board[0, 2])
 
         if 0 not in self.board[0] and 0 not in self.board[1] and 0 not in self.board[2]:
             return 0
 
     def get_possible_actions(self: Self) -> list[Action]:
-        return [TicTacToeAction(int(y), int(x)) for x, y in np.argwhere(self.board == 0)]
+        return [
+            TicTacToeAction(int(y), int(x)) for x, y in np.argwhere(self.board == 0)
+        ]
 
     def transition(self: Self, action: TicTacToeAction) -> Self:
         new_state = TicTacToeGameState(self.board.copy())
