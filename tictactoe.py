@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Self, Optional
 
 import numpy as np
@@ -15,6 +14,12 @@ class TicTacToeAction(Action):
         """Initialize the action."""
         self.x = x
         self.y = y
+
+    def __eq__(self: Self, other: Self):
+        return self.x == other.x and self.y == other.y
+
+    def __hash__(self: Self):
+        return 3 * self.x + self.y
 
     def __repr__(self: Self) -> str:
         """Return a string representation of the action."""
@@ -40,27 +45,15 @@ class TicTacToeGameState(GameState):
             self.board = initial_state
 
     def get_winner(self: Self) -> Optional[int]:
-        for row in self.board:
-            if row[0] == row[1] == row[2] and row[0]:
-                return int(row[0])
+        check_col = self.board.sum(axis=0)
+        check_row = self.board.sum(axis=1)
+        check_diag = np.trace(self.board)
+        check_anti_diag = np.trace(np.fliplr(self.board))
 
-        for col in self.board.T:
-            if col[0] == col[1] == col[2] and col[0]:
-                return int(col[0])
+        if -3 in check_col or -3 in check_row or check_diag == -3 or check_anti_diag == -3:
+            return -1
 
-        if (
-            self.board[0, 0] == self.board[1, 1] == self.board[2, 2]
-            and self.board[0, 0]
-        ):
-            return int(self.board[0, 0])
-
-        if (
-            self.board[0, 2] == self.board[1, 1] == self.board[2, 0]
-            and self.board[0, 2]
-        ):
-            return int(self.board[0, 2])
-
-        if 0 not in self.board[0] and 0 not in self.board[1] and 0 not in self.board[2]:
+        if 0 not in self.board:
             return 0
 
     def get_possible_actions(self: Self) -> list[Action]:

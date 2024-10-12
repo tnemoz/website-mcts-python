@@ -1,5 +1,3 @@
-from math import sqrt
-
 import numpy as np
 
 from mcts import MCTS
@@ -13,7 +11,7 @@ initial_state = np.array(
     ]
 )
 
-mcts_player = MCTS(TicTacToeGameState(initial_state), sqrt(2), 800, player=1)
+mcts_player = MCTS(TicTacToeGameState(initial_state), np.sqrt(2), 800)
 action = mcts_player.decide(advance=False)
 
 print(mcts_player.root_state.transition(action))

@@ -55,36 +55,32 @@ class _Node:
         """Return True if this Node is a leaf node."""
         return len(self.children) == 0
 
-    def select_child(
-        self: Self, player: int, state: GameState
-    ) -> tuple[Self, int, GameState]:
+    def select_child(self: Self, state: GameState) -> tuple[Self, GameState]:
         """Recursively select a leaf using the exploration/exploitation trade-off formula."""
         if self.is_leaf:
-            return self, player, state
+            return self, state
 
         best_child, best_action = max(
             zip(self.children, self.actions),
             key=lambda child_action: child_action[0].ucb,
         )
 
-        return best_child.select_child(-player, state.transition(best_action))
+        return best_child.select_child(state.transition(best_action))
 
-    def expand(
-        self: Self, player: int, state: GameState
-    ) -> tuple[Self, int, GameState]:
+    def expand(self: Self, state: GameState) -> tuple[Self, GameState]:
         """Expand this Node by listing all the possible actions and randomly choose a child."""
         # If the state is terminal, we don't expand the associated node
         if state.get_winner() is not None:
-            return self, player, state
+            return self, state
 
         self.actions = state.get_possible_actions()
         self.children = [_Node(self) for _ in self.actions]
         chosen_child, chosen_action = choice(list(zip(self.children, self.actions)))
 
-        return chosen_child, -player, state.transition(chosen_action)
+        return chosen_child, state.transition(chosen_action)
 
     @staticmethod
-    def rollout(state: GameState, player: int) -> int:
+    def rollout(state: GameState) -> int:
         """Perform the rollout phase of the MCTS.
 
         This function randomly selects moves until a terminal game state is reached from this state.
@@ -94,6 +90,7 @@ class _Node:
         - 0 if it resulted in a draw.
         """
         new_state = state
+        player = 1
 
         while (winner := new_state.get_winner()) is None:
             random_action = choice(new_state.get_possible_actions())
@@ -102,28 +99,28 @@ class _Node:
 
         return winner * player
 
-    def backpropagate(self: Self, rollout_value: int, player_to_play: int) -> None:
+    def backpropagate(self: Self, rollout_value: int) -> None:
         """Backpropagate the rollout result through the tree.
 
         This function performs the backpropagation phase of the MCTS algorithm. It updates the value
         of the nodes according to the player playing in their position and the rollout result.
 
-        :param rollout_value: The value of the rollout result. It is equal to 0 if the first player
-          won, 1 if the second player won, and 0.5 in case of a draw.
-        :param player_to_play: The player having to play the position represented by this node.
+        :param rollout_value: The value of the rollout result. It is equal to 1 if the current
+          player won, -1 if the other player won, and 0 in case of a draw.
         """
         self.visits += 1
 
-        # If the first player wins the rollout, while the second player has to play this position,
-        # then it means that the node's value has to increase
-        if rollout_value != player_to_play:
+        # If the current player wins the rollout, then this node's value must decrease
+        # This is because intuitively, the current player is the adversary of the player that will
+        #   look at this node
+        if rollout_value == -1:
             self.n_wins += 1
         elif rollout_value:
             self.n_defeats += 1
 
         # Unless we're at the root of the tree
         if self.parent is not None:
-            self.parent.backpropagate(rollout_value, -player_to_play)
+            self.parent.backpropagate(-rollout_value)
 
     def __repr__(self: Self) -> str:
         value = self.value
@@ -140,7 +137,6 @@ class MCTS:
         state: GameState,
         trade_off_constant: float,
         n_simulations: int,
-        player: int,
     ) -> None:
         """Initialize the MCTS algorithm.
 
@@ -149,17 +145,22 @@ class MCTS:
         :param state: The state the game starts in.
         :param trade_off_constant: The trade-off constant as used in the UCB formula.
         :param n_simulations: The number of simulations that are performed from the root.
-        :param player: The player that plays the position represented by the root.
         """
         _Node.set_trade_off_constant(trade_off_constant)
         self.root = _Node(None)
         self.root_state = state
         self.n_simulations = n_simulations
 
-        if player not in [-1, 1]:
-            raise ValueError("Player must be -1 or 1.")
+    def transition(self: Self, action: Action) -> None:
+        """Advance the game with a given action.
 
-        self.player = player
+        This function allows to progress in the game tree without any computation. This may for
+        example prove useful if the adversary is exterior to this class.
+        """
+        index = self.root.actions.index(action)
+
+        self.root = self.root.children[index]
+        self.root_state = self.root_state.transition(action)
 
     def decide(self: Self, advance: bool = True) -> Optional[Action]:
         """Decide the next move to be played.
@@ -168,25 +169,23 @@ class MCTS:
         updating the nodes' scores along the way. Once these simulations have been performed, it
         selects the best child to go with according to its visit counts.
 
-        :param advance: If set to True, nothing will be returned and the new root will be set to the
-          aforementioned child. Otherwise, it returns the action leading to the best child.
+        :param advance: If set to True, in addition to returning the best action, the root will be
+          set to the child corresponding to this action.
         """
         node = self.root
 
         for _ in trange(self.n_simulations):
-            node, player, state = node.select_child(self.player, self.root_state)
-            node, player, state = node.expand(player, state)
-            rollout_value = node.rollout(state, player)
-            node.backpropagate(rollout_value, player)
+            node, state = node.select_child(self.root_state)
+            node, state = node.expand(state)
+            rollout_value = node.rollout(state)
+            node.backpropagate(rollout_value)
             node = self.root
 
-        chosen_index = max(enumerate(self.root.children), key=lambda x: x[1].visits)[0]
+        chosen_action = self.root.actions[
+            max(enumerate(self.root.children), key=lambda x: x[1].visits)[0]
+        ]
 
         if advance:
-            self.root = self.root.children[chosen_index]
-            self.root_state = self.root_state.transition(
-                self.root.actions[chosen_index]
-            )
-            self.player *= -1
+            self.transition(chosen_action)
 
-        return self.root.actions[chosen_index]
+        return chosen_action
